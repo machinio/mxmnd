@@ -8,20 +8,24 @@ module Mxmnd
   LICENSE_KEY_ENV_KEY = 'MAX_MIND_LICENSE_KEY'.freeze
 
   class << self
-    def city(ip, faraday_options = {})
+    def city(ip, faraday_options = {}, &connection_block)
       raise BadRequest.new('IP_ADDRESS_REQUIRED', 'You have not passed IP address.') unless ip
+
       path = "/city/#{ip}"
-      get(connection(faraday_options), path)
+      get(connection(faraday_options, &connection_block), path)
     end
 
     private
 
-    def connection(faraday_options = {})
-      @connection ||= Faraday.new(BASE_URL, faraday_options)
+    def connection(faraday_options = {}, &connection_block)
+      Faraday.new(BASE_URL, faraday_options) do |conn|
+        conn.request :authorization, :basic, ENV[USER_ID_ENV_KEY], ENV[LICENSE_KEY_ENV_KEY]
+        conn.headers['User-Agent'] = "mxmnd"
+        connection_block.call(conn) if connection_block
+      end
     end
 
     def get(connection, path)
-      connection.basic_auth(ENV[USER_ID_ENV_KEY], ENV[LICENSE_KEY_ENV_KEY])
       full_path = "#{BASE_PATH}#{path}"
       response = connection.get(full_path)
       raise_if_error!(response)
@@ -57,7 +61,7 @@ module Mxmnd
 
   class Unauthorized < ClientError
     def initialize(code, error)
-      msg = "#{error} Set valid #{USER_ID_ENV_KEY} and #{LICENSE_KEY_ENV_KEY} environmental variables to authenticate with MaxMind API." 
+      msg = "#{error} Set valid #{USER_ID_ENV_KEY} and #{LICENSE_KEY_ENV_KEY} environmental variables to authenticate with MaxMind API."
       super(code, msg)
     end
   end

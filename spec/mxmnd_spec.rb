@@ -1,30 +1,42 @@
 require 'spec_helper'
 
+def stub_mxmnd_request(ip, headers: {})
+  response_path = './spec/features/mxmnd_res.txt'
+  request_headers = {
+    'Accept' => '*/*',
+    'Accept-Encoding' => 'gzip;q=1.0,deflate;q=0.6,identity;q=0.3',
+    'User-Agent' => 'mxmnd'
+  }.merge(headers)
+  stub_request(:get, "https://geoip.maxmind.com/geoip/v2.1/city/#{ip}").
+    with(headers: request_headers).
+    to_return(File.new(response_path))
+end
+
 describe Mxmnd do
   it 'raises BadRequest on missing IP address' do
     expect { Mxmnd.city(nil) }.to raise_error Mxmnd::BadRequest
   end
+
+  describe 'accepts connection block' do
+    before do
+      stub_mxmnd_request('45.17.22.11', headers: { 'User-Agent' => 'Ruby MXMND' })
+    end
+
+    it 'works' do
+      response = Mxmnd.city('45.17.22.11') do |conn|
+        conn.headers['User-Agent'] = 'Ruby MXMND'
+      end
+      expect(response).to be_a(Hash)
+    end
+  end
 end
 
 describe 'Mxmnd.city response' do
-  before {
-    @url = 'https://geoip.maxmind.com/geoip/v2.1/city/45.17.22.11'
-    response_path = './spec/features/mxmnd_res.txt'
-    request_headers = {
-      # got from rails hint
-      'Accept' => '*/*',
-      'Accept-Encoding' => 'gzip;q=1.0,deflate;q=0.6,identity;q=0.3',
-      'User-Agent' => 'Ruby'
-    }
-    # i've changed "Content-Length" property of recorded response from 1476 to 2515
-    # because of by unknown reason stub didn't return the whole response
-    response_file = File.new(response_path)
-    stub_request(:get, 'http://https//geoip.maxmind.com/geoip/v2.1/city/45.17.22.11:80/').
-      with(headers: request_headers).
-      to_return(response_file)
-  }
+  before do
+    stub_mxmnd_request('45.17.22.11')
+  end
 
-  let(:response) { JSON.parse(Net::HTTP.get(@url, '/')) }
+  let(:response) { Mxmnd.city('45.17.22.11') }
 
   it 'should be a hash' do
     expect(response).to be_a(Hash)
